@@ -122,9 +122,8 @@ function invertAt(r, c) {
     setCellValue(r, j, board[r][j] ^ 1);
   }
 
-  // invert column c (skip intersection to match "row + column" toggle exactly once for pivot cell)
+  // invert column c (Variant B: the pivot cell is toggled twice in total -> stays unchanged)
   for (let i = 0; i < rows; i++) {
-    if (i === r) continue;
     setCellValue(i, c, board[i][c] ^ 1);
   }
 }
