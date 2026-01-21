@@ -45,12 +45,29 @@
           <button class="btn btn--ghost" id="copyBtn" type="button">Скопировать матрицу</button>
         </div>
 
-        <div class="gridWrap">
-          <div class="grid" id="grid" aria-label="Игровое поле" role="grid"></div>
-          <div class="hint">
-            Подсказка: <span class="kbd">Клик</span> — ход, <span class="kbd">Shift + клик</span> — только
-            подсветка строки/столбца.
+        <div class="layout">
+          <div class="gridWrap">
+            <div class="grid" id="grid" aria-label="Игровое поле" role="grid"></div>
+            <div class="hint">
+              Подсказка: <span class="kbd">Клик</span> — ход, <span class="kbd">Shift + клик</span> — только
+              подсветка строки/столбца.
+            </div>
           </div>
+
+          <aside class="moves" aria-label="Лог ходов">
+            <div class="moves__header">
+              <div>
+                <div class="moves__title">Ходы</div>
+                <div class="moves__subtitle small muted">Формат: (строка, столбец), нумерация с 1</div>
+              </div>
+              <div class="moves__actions">
+                <button class="btn btn--ghost" id="movesClearBtn" type="button">Очистить</button>
+                <button class="btn btn--ghost" id="movesCopyBtn" type="button">Скопировать</button>
+              </div>
+            </div>
+            <ol class="moves__list" id="movesList"></ol>
+            <div class="moves__footer small muted" id="movesFooter">0 ходов</div>
+          </aside>
         </div>
 
         <details class="advanced">

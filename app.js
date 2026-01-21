@@ -11,6 +11,10 @@ const els = {
   solveBtn: $("#solveBtn"),
   resetBtn: $("#resetBtn"),
   copyBtn: $("#copyBtn"),
+  movesList: $("#movesList"),
+  movesFooter: $("#movesFooter"),
+  movesClearBtn: $("#movesClearBtn"),
+  movesCopyBtn: $("#movesCopyBtn"),
   movesPill: $("#movesPill"),
   onesPill: $("#onesPill"),
   winPill: $("#winPill"),
@@ -25,6 +29,8 @@ let board = [];
 let initialBoard = [];
 let moves = 0;
 let highlight = { r: -1, c: -1, pivot: false };
+/** @type {Array<{r:number,c:number,src:"user"|"solver"}>} */
+let moveLog = [];
 
 function clampInt(n, min, max, fallback) {
   const x = Number.parseInt(String(n), 10);
@@ -69,6 +75,35 @@ function updateStatus() {
   setWinUI(isWin(board));
 }
 
+function renderMoveLog() {
+  if (!els.movesList) return;
+  els.movesList.innerHTML = "";
+  for (let i = 0; i < moveLog.length; i++) {
+    const m = moveLog[i];
+    const li = document.createElement("li");
+    li.classList.toggle("is-solver", m.src === "solver");
+    // show 1-based coords to match user expectation
+    li.textContent = `(${m.r + 1}, ${m.c + 1})${m.src === "solver" ? "  · решатель" : ""}`;
+    els.movesList.appendChild(li);
+  }
+  if (els.movesFooter) els.movesFooter.textContent = `${moveLog.length} ход(ов)`;
+}
+
+function clearMoveLog() {
+  moveLog = [];
+  renderMoveLog();
+}
+
+function logMove(r, c, src) {
+  moveLog.push({ r, c, src });
+  renderMoveLog();
+}
+
+function serializeMoves() {
+  // one per line, 1-based, easy to replay
+  return moveLog.map((m, i) => `${i + 1}. ${m.r + 1} ${m.c + 1}${m.src === "solver" ? " solver" : ""}`).join("\n");
+}
+
 function renderGrid() {
   const rows = board.length;
   const cols = board[0]?.length ?? 0;
@@ -92,6 +127,7 @@ function renderGrid() {
 
   applyHighlights();
   updateStatus();
+  renderMoveLog();
 }
 
 function applyHighlights() {
@@ -134,6 +170,7 @@ function newGameFromBoard(b) {
   initialBoard = cloneBoard(b);
   moves = 0;
   highlight = { r: -1, c: -1, pivot: false };
+  clearMoveLog();
   renderGrid();
   syncMatrixTextarea();
 }
@@ -168,6 +205,7 @@ function shuffleGame() {
   initialBoard = cloneBoard(board);
   moves = 0;
   highlight = { r: -1, c: -1, pivot: false };
+  clearMoveLog();
   applyHighlights();
   updateStatus();
   syncMatrixTextarea();
@@ -337,6 +375,8 @@ async function applySolution(presses) {
   }
 
   setError(`Решаю: ${movesList.length} ход(ов)…`);
+  // treat solver as a fresh "recipe": clear previous log, then record solver steps
+  clearMoveLog();
   highlight = { r: -1, c: -1, pivot: false };
   applyHighlights();
 
@@ -348,6 +388,7 @@ async function applySolution(presses) {
       applyHighlights();
       await new Promise((res) => setTimeout(res, 35));
     }
+    logMove(r, c, "solver");
     invertAt(r, c);
     moves += 1;
   }
@@ -381,6 +422,7 @@ els.grid.addEventListener("click", (e) => {
   highlight = { r, c, pivot: true };
   applyHighlights();
 
+  logMove(r, c, "user");
   invertAt(r, c);
   moves += 1;
   updateStatus();
@@ -420,6 +462,21 @@ els.solveBtn.addEventListener("click", async () => {
   }
 });
 els.resetBtn.addEventListener("click", resetGame);
+
+els.movesClearBtn?.addEventListener("click", () => {
+  clearMoveLog();
+  setError("");
+});
+
+els.movesCopyBtn?.addEventListener("click", async () => {
+  try {
+    await copyToClipboard(serializeMoves());
+    setError("Ходы скопированы.");
+    setTimeout(() => setError(""), 1200);
+  } catch {
+    setError("Не удалось скопировать ходы.");
+  }
+});
 
 els.copyBtn.addEventListener("click", async () => {
   try {
