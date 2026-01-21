@@ -15,6 +15,7 @@ const els = {
   movesFooter: $("#movesFooter"),
   movesClearBtn: $("#movesClearBtn"),
   movesCopyBtn: $("#movesCopyBtn"),
+  movesPreviewToggle: $("#movesPreviewToggle"),
   movesPill: $("#movesPill"),
   onesPill: $("#onesPill"),
   winPill: $("#winPill"),
@@ -29,7 +30,8 @@ let board = [];
 let initialBoard = [];
 let moves = 0;
 let highlight = { r: -1, c: -1, pivot: false };
-/** @type {Array<{r:number,c:number,src:"user"|"solver"}>} */
+let showMovePreviews = true;
+/** @type {Array<{r:number,c:number,src:"user"|"solver",after:number[][]}>} */
 let moveLog = [];
 
 function clampInt(n, min, max, fallback) {
@@ -78,12 +80,39 @@ function updateStatus() {
 function renderMoveLog() {
   if (!els.movesList) return;
   els.movesList.innerHTML = "";
+  const show = Boolean(showMovePreviews);
   for (let i = 0; i < moveLog.length; i++) {
     const m = moveLog[i];
     const li = document.createElement("li");
     li.classList.toggle("is-solver", m.src === "solver");
+
+    const wrap = document.createElement("div");
+    wrap.className = "moveRow";
+
+    const title = document.createElement("div");
     // show 1-based coords to match user expectation
-    li.textContent = `(${m.r + 1}, ${m.c + 1})${m.src === "solver" ? "  · решатель" : ""}`;
+    title.textContent = `(${m.r + 1}, ${m.c + 1})${m.src === "solver" ? "  · решатель" : ""}`;
+    wrap.appendChild(title);
+
+    if (show && m.after?.length) {
+      const R = m.after.length;
+      const C = m.after[0]?.length ?? 0;
+      const mini = document.createElement("div");
+      mini.className = "miniGrid";
+      mini.style.gridTemplateColumns = `repeat(${C}, 10px)`;
+      for (let r = 0; r < R; r++) {
+        for (let c = 0; c < C; c++) {
+          const cell = document.createElement("div");
+          cell.className = "miniCell";
+          cell.dataset.v = String(m.after[r][c]);
+          if (r === m.r && c === m.c) cell.classList.add("is-pivot");
+          mini.appendChild(cell);
+        }
+      }
+      wrap.appendChild(mini);
+    }
+
+    li.appendChild(wrap);
     els.movesList.appendChild(li);
   }
   if (els.movesFooter) els.movesFooter.textContent = `${moveLog.length} ход(ов)`;
@@ -95,7 +124,7 @@ function clearMoveLog() {
 }
 
 function logMove(r, c, src) {
-  moveLog.push({ r, c, src });
+  moveLog.push({ r, c, src, after: cloneBoard(board) });
   renderMoveLog();
 }
 
@@ -388,9 +417,9 @@ async function applySolution(presses) {
       applyHighlights();
       await new Promise((res) => setTimeout(res, 35));
     }
-    logMove(r, c, "solver");
     invertAt(r, c);
     moves += 1;
+    logMove(r, c, "solver");
   }
 
   highlight = { r: -1, c: -1, pivot: false };
@@ -422,9 +451,9 @@ els.grid.addEventListener("click", (e) => {
   highlight = { r, c, pivot: true };
   applyHighlights();
 
-  logMove(r, c, "user");
   invertAt(r, c);
   moves += 1;
+  logMove(r, c, "user");
   updateStatus();
   syncMatrixTextarea();
 });
@@ -478,6 +507,11 @@ els.movesCopyBtn?.addEventListener("click", async () => {
   }
 });
 
+els.movesPreviewToggle?.addEventListener("change", () => {
+  showMovePreviews = Boolean(els.movesPreviewToggle?.checked);
+  renderMoveLog();
+});
+
 els.copyBtn.addEventListener("click", async () => {
   try {
     await copyToClipboard(serializeBoard(board));
@@ -501,6 +535,7 @@ els.applyMatrixBtn.addEventListener("click", () => {
 });
 
 // Initialize with the example from the screenshot (4x4).
+showMovePreviews = Boolean(els.movesPreviewToggle?.checked ?? true);
 newGameFromBoard([
   [0, 0, 1, 1],
   [0, 1, 1, 1],
