@@ -8,6 +8,7 @@ const els = {
   cols: $("#cols"),
   newBtn: $("#newBtn"),
   shuffleBtn: $("#shuffleBtn"),
+  solveBtn: $("#solveBtn"),
   resetBtn: $("#resetBtn"),
   copyBtn: $("#copyBtn"),
   movesPill: $("#movesPill"),
@@ -234,6 +235,132 @@ function copyToClipboard(text) {
   return Promise.resolve();
 }
 
+// --- Solver (Variant B) ---
+// Pressing (r,c) toggles row r and column c; pivot cell (r,c) is toggled twice -> unchanged.
+// For target cell (i,j): affected by presses in same row i except column j, and same column j except row i.
+function solveVariantB(current) {
+  const R = current.length;
+  const C = current[0]?.length ?? 0;
+  const n = R * C; // vars: press each cell
+  const m = n; // equations: each cell target
+
+  /** @type {Array<{mask: bigint, rhs: number}>} */
+  const eqs = new Array(m);
+
+  const bit = (k) => 1n << BigInt(k);
+  const idx = (r, c) => r * C + c;
+
+  for (let i = 0; i < R; i++) {
+    for (let j = 0; j < C; j++) {
+      let mask = 0n;
+
+      // same row i, except column j
+      for (let c = 0; c < C; c++) {
+        if (c === j) continue;
+        mask ^= bit(idx(i, c));
+      }
+      // same column j, except row i
+      for (let r = 0; r < R; r++) {
+        if (r === i) continue;
+        mask ^= bit(idx(r, j));
+      }
+
+      const rhs = (current[i][j] ^ 1) & 1; // need toggles to make it 1
+      eqs[idx(i, j)] = { mask, rhs };
+    }
+  }
+
+  // Gaussian elimination over GF(2)
+  let row = 0;
+  /** @type {number[]} */
+  const where = new Array(n).fill(-1);
+
+  for (let col = 0; col < n && row < m; col++) {
+    const colBit = bit(col);
+    let sel = -1;
+    for (let i = row; i < m; i++) {
+      if ((eqs[i].mask & colBit) !== 0n) {
+        sel = i;
+        break;
+      }
+    }
+    if (sel === -1) continue;
+
+    // swap
+    if (sel !== row) {
+      const tmp = eqs[sel];
+      eqs[sel] = eqs[row];
+      eqs[row] = tmp;
+    }
+
+    where[col] = row;
+
+    // eliminate this column from all other rows (RREF style)
+    for (let i = 0; i < m; i++) {
+      if (i === row) continue;
+      if ((eqs[i].mask & colBit) === 0n) continue;
+      eqs[i].mask ^= eqs[row].mask;
+      eqs[i].rhs ^= eqs[row].rhs;
+    }
+
+    row++;
+  }
+
+  // check consistency
+  for (let i = 0; i < m; i++) {
+    if (eqs[i].mask === 0n && (eqs[i].rhs & 1) === 1) {
+      return { ok: false, reason: "Нет решения для текущего поля (вариант B)." };
+    }
+  }
+
+  /** @type {number[]} */
+  const ans = new Array(n).fill(0);
+  for (let col = 0; col < n; col++) {
+    if (where[col] !== -1) ans[col] = eqs[where[col]].rhs & 1;
+  }
+
+  return { ok: true, presses: ans };
+}
+
+async function applySolution(presses) {
+  const R = board.length;
+  const C = board[0]?.length ?? 0;
+  const idx = (r, c) => r * C + c;
+
+  /** @type {Array<[number, number]>} */
+  const movesList = [];
+  for (let r = 0; r < R; r++) for (let c = 0; c < C; c++) if (presses[idx(r, c)] === 1) movesList.push([r, c]);
+
+  if (movesList.length === 0) {
+    setError(isWin(board) ? "Уже решено." : "Решение: 0 ходов (значит поле не изменится).");
+    return;
+  }
+
+  setError(`Решаю: ${movesList.length} ход(ов)…`);
+  highlight = { r: -1, c: -1, pivot: false };
+  applyHighlights();
+
+  // If many moves — apply instantly, иначе — короткая анимация.
+  const animate = movesList.length <= 40;
+  for (const [r, c] of movesList) {
+    if (animate) {
+      highlight = { r, c, pivot: true };
+      applyHighlights();
+      await new Promise((res) => setTimeout(res, 35));
+    }
+    invertAt(r, c);
+    moves += 1;
+  }
+
+  highlight = { r: -1, c: -1, pivot: false };
+  applyHighlights();
+  updateStatus();
+  syncMatrixTextarea();
+
+  setError(isWin(board) ? "Готово: поле приведено к 1." : "Хмм… применил решение, но поле не стало всем 1 (проверь правила).");
+  setTimeout(() => setError(""), 1600);
+}
+
 // Events
 els.grid.addEventListener("click", (e) => {
   const target = e.target;
@@ -280,6 +407,18 @@ els.grid.addEventListener("mouseleave", () => {
 
 els.newBtn.addEventListener("click", newEmptyFromInputs);
 els.shuffleBtn.addEventListener("click", shuffleGame);
+els.solveBtn.addEventListener("click", async () => {
+  try {
+    const res = solveVariantB(board);
+    if (!res.ok) {
+      setError(res.reason || "Нет решения.");
+      return;
+    }
+    await applySolution(res.presses);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Ошибка решателя.");
+  }
+});
 els.resetBtn.addEventListener("click", resetGame);
 
 els.copyBtn.addEventListener("click", async () => {
